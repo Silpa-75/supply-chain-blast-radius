@@ -1,0 +1,178 @@
+App.jsx:
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import SupplyGraph from './SupplyGraph'; // Adjust path if your graph component is named differently
+
+function App() {
+  const [graphData, setGraphData] = useState({ nodes: [], relationships: [] });
+  const [selectedSupplier, setSelectedSupplier] = useState('');
+  const [impactedNodes, setImpactedNodes] = useState([]);
+
+  useEffect(() => {
+    // Fetch initial graph
+    axios.get('http://localhost:5001/api/graph')
+      .then((response) => {
+        setGraphData(response.data);
+        const suppliers = response.data.nodes.filter(n => n.label === 'Supplier');
+        if (suppliers.length > 0) {
+          setSelectedSupplier(suppliers[0].id);
+        }
+      })
+      .catch((err) => console.error('Error fetching graph:', err));
+  }, []);
+
+  const handleSimulate = async () => {
+    if (!selectedSupplier) return;
+    try {
+      const response = await axios.get(`http://localhost:5001/api/blast-radius/${selectedSupplier}`);
+      console.log('Backend response:', response.data);
+      setImpactedNodes(response.data.impactedNodeIds || []);
+    } catch (error) {
+      console.error('Error running blast radius simulation:', error);
+    }
+  };
+
+  const suppliers = graphData.nodes.filter(n => n.label === 'Supplier');
+
+  return (
+    <div style={{ padding: '20px', background: '#0f172a', minHeight: '100vh', color: '#fff' }}>
+      <h1>Supply Chain Blast-Radius Analyzer</h1>
+      
+      <div style={{ marginBottom: '20px' }}>
+        <select 
+          value={selectedSupplier} 
+          onChange={(e) => setSelectedSupplier(e.target.value)}
+          style={{ padding: '8px', marginRight: '10px' }}
+        >
+          {suppliers.map(s => (
+            <option key={s.id} value={s.id}>{s.name} ({s.label})</option>
+          ))}
+        </select>
+        
+        <button 
+          onClick={handleSimulate}
+          style={{ padding: '8px 16px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+        >
+          Simulate Failure
+        </button>
+      </div>
+
+      {impactedNodes.length > 0 && (
+        <div style={{ padding: '10px', background: '#ef4444', color: '#fff', borderRadius: '4px', marginBottom: '20px' }}>
+          ⚠️ Blast Radius Impact: {impactedNodes.length} entities impacted downstream!
+        </div>
+      )}
+
+      <SupplyGraph 
+        graphData={graphData} 
+        impactedNodes={impactedNodes} 
+        selectedSupplier={selectedSupplier} 
+      />
+    </div>
+  );
+}
+
+export default App;
+
+main.jsx:
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App.jsx';
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
+
+SupplyGraph.jsx:
+import React, { useEffect, useRef } from 'react';
+import cytoscape from 'cytoscape';
+
+const SupplyGraph = ({ graphData = { nodes: [], relationships: [] }, impactedNodes = [], selectedSupplier = '' }) => {
+  const containerRef = useRef(null);
+  const cyRef = useRef(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    
+    // Safely fallback if props are missing
+    const safeNodes = graphData?.nodes || [];
+    const safeRelationships = graphData?.relationships || [];
+
+    if (safeNodes.length === 0) return;
+
+    const elements = [
+      ...safeNodes.map(node => ({
+        data: { id: node.id, name: node.name, label: node.label }
+      })),
+      ...safeRelationships.map(rel => ({
+        data: { id: `${rel.source}-${rel.target}`, source: rel.source, target: rel.target }
+      }))
+    ];
+
+    cyRef.current = cytoscape({
+      container: containerRef.current,
+      elements: elements,
+      style: [
+        {
+          selector: 'node',
+          style: {
+            'background-color': '#2563eb',
+            'label': 'data(name)',
+            'color': '#ffffff',
+            'text-valign': 'center',
+            'text-halign': 'center',
+            'width': '80px',
+            'height': '80px',
+            'font-size': '12px'
+          }
+        },
+        {
+          selector: 'edge',
+          style: {
+            'width': 3,
+            'line-color': '#64748b',
+            'target-arrow-color': '#64748b',
+            'target-arrow-shape': 'triangle',
+            'curve-style': 'bezier'
+          }
+        }
+      ],
+      layout: {
+        name: 'breadthfirst',
+        directed: true,
+        padding: 10
+      }
+    });
+
+    return () => {
+      if (cyRef.current) cyRef.current.destroy();
+    };
+  }, [graphData]);
+
+  // Handle color updates when simulation runs
+  useEffect(() => {
+    if (!cyRef.current) return;
+
+    cyRef.current.nodes().forEach(node => {
+      const nodeId = node.id();
+      if (String(nodeId) === String(selectedSupplier)) {
+        node.style('background-color', '#eab308'); // Yellow for origin supplier
+      } else if (impactedNodes.map(String).includes(String(nodeId))) {
+        node.style('background-color', '#ef4444'); // Red for impacted downstream
+      } else {
+        node.style('background-color', '#2563eb'); // Blue default
+      }
+    });
+  }, [impactedNodes, selectedSupplier]);
+
+  return (
+    <div 
+      ref={containerRef} 
+      style={{ width: '100%', height: '500px', background: '#1e293b', borderRadius: '8px' }} 
+    />
+  );
+};
+
+export default SupplyGraph;
