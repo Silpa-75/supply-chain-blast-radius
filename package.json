@@ -1,0 +1,27 @@
+{
+  "name": "supply_chain_analyzer",
+  "version": "1.0.0",
+  "description": "Supply chain graph analyzer with CognoDB and Cytoscape.js",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "vite"
+  },
+  "dependencies": {
+    "axios": "^1.19.0",
+    "cors": "^2.8.5",
+    "cytoscape": "^3.34.1",
+    "dotenv": "^17.4.2",
+    "express": "^4.18.2",
+    "lucide-react": "^0.292.0",
+    "neo4j-driver": "^5.28.3",
+    "react": "^18.3.1",
+    "react-cytoscapejs": "^2.0.0",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.0.0",
+    "vite": "^5.0.0"
+  }
+}
